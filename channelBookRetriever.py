@@ -4,13 +4,11 @@ from database import DB
 from telethon.sync import TelegramClient
 from telethon.tl.functions.messages import GetHistoryRequest
 
-
 NOT_PROCESSED_EXT = ['mp4', 'mp3']
 
 
 class ChannelBookRetriever:
     client: TelegramClient
-
 
     def connect_to_telegram(self):
         # Считываем учетные данные
@@ -24,7 +22,6 @@ class ChannelBookRetriever:
 
         self.client = TelegramClient(username, api_id, api_hash)
         self.client.start()
-
 
     def disconnect_from_telegram(self):
         None
@@ -61,7 +58,7 @@ class ChannelBookRetriever:
             offset_msg = messages[len(messages) - 1].id
 
 
-def test():
+async def process_channels():
     urls = [
         # ('Data Science Books', 'https://t.me/DataScience_Books'),
         # ('Javascript js frontend', 'https://t.me/frontendarchive'),  # !!!
@@ -75,18 +72,23 @@ def test():
     ]
 
     db = DB()
-    cp = ChannelBookRetriever()
     db.db_connect()
-    cp.connect_to_telegram()
-    ioloop = asyncio.get_event_loop()
+
+    book_retriever = ChannelBookRetriever()
+    book_retriever.connect_to_telegram()
+
+    tasks = []
     for channel_name, channel_tech_name in urls:
         db.add_channel(channel_name, channel_tech_name)
-        task = ioloop.create_task(cp.process_channel(channel_tech_name, db))
-        ioloop.run_until_complete(task)
-    ioloop.close()
-    cp.disconnect_from_telegram()
+        task = asyncio.create_task(book_retriever.process_channel(channel_tech_name, db))
+        tasks.append(task)
+    # await asyncio.gather(tasks)
+    with book_retriever.client:
+        book_retriever.client.loop.run_until_complete(main())
+
+    book_retriever.disconnect_from_telegram()
     db.db_disconnect()
 
 
 if __name__ == '__main__':
-    test()
+    asyncio.run(process_channels())
