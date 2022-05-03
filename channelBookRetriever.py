@@ -82,9 +82,9 @@ async def process_channels():
         db.add_channel(channel_name, channel_tech_name)
         task = asyncio.create_task(book_retriever.process_channel(channel_tech_name, db))
         tasks.append(task)
-    # await asyncio.gather(tasks)
-    with book_retriever.client:
-        book_retriever.client.loop.run_until_complete(main())
+    await asyncio.gather(tasks)
+    # with client:
+    #    client.loop.run_until_complete(main())
 
     book_retriever.disconnect_from_telegram()
     db.db_disconnect()
