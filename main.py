@@ -1,3 +1,10 @@
+# Optionl Telethon libraries
+# --------------------------------------------------------------------------------------------------------
+# If cryptg is installed, the telethon library will work a lot faster, since encryption and
+# decryption will be made in C instead of Python.
+import cryptg
+
+
 import configparser
 import json
 import io

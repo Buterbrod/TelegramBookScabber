@@ -1,4 +1,5 @@
 import configparser
+import asyncio
 from database import DB
 from telethon.sync import TelegramClient
 from telethon.tl.functions.messages import GetHistoryRequest
@@ -8,6 +9,10 @@ NOT_PROCESSED_EXT = ['mp4', 'mp3']
 
 class ChannelProcessing:
     client: TelegramClient
+    tasks: []
+
+    def __init__(self):
+        self.tasks = []
 
     def connect_to_telegram(self):
         # Считываем учетные данные
@@ -22,7 +27,8 @@ class ChannelProcessing:
         self.client = TelegramClient(username, api_id, api_hash)
         self.client.start()
 
-    # def disconnect_from_telegram(self):
+    def disconnect_from_telegram(self):
+        self.client.disconnect()
 
     # Записывает json-файл с информацией о всех сообщениях канала/чата
     async def process_channel(self, channel_tech_name, db):
@@ -33,6 +39,7 @@ class ChannelProcessing:
         db_channel_id = db.get_channel_id(channel_tech_name)
         # цикл, так как получаем сообщения порциями
         while True:
+            print(channel_tech_name + ": " + str(offset_msg))
             history = GetHistoryRequest(
                 peer=channel_tech_name,
                 offset_id=offset_msg,  # номер записи, с которой начинается считывание
@@ -42,7 +49,14 @@ class ChannelProcessing:
                 max_id=0,
                 min_id=0,
                 hash=0)
-            history = await self.client(history)
+            try:
+                history = await self.client(history)
+            except ValueError as error:
+                print(channel_tech_name + ": " + str(error))
+                break
+            except Exception as error:
+                print("Exception: " + error)
+                break
             if not history.messages:
                 break
             messages = history.messages
@@ -52,11 +66,29 @@ class ChannelProcessing:
                         and message.file.ext not in NOT_PROCESSED_EXT:
                     db.add_book(db_channel_id, message.id, message.date, message.file.name, message.file.size,
                                 "NOT_SAVED")
-
             offset_msg = messages[len(messages) - 1].id
 
+    def add_channel_processing(self, channel_tech_name, db):
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(self.process_channel(channel_tech_name, db), name=channel_tech_name)
+        self.tasks.append(task)
 
-def test():
+    def wait_channel_processing(self):
+        # await asyncio.wait(self.tasks)
+        loop = asyncio.get_event_loop()
+        #loop.run_forever() # run_until_complete(asyncio.sleep(3))
+        for task in self.tasks:
+            loop.run_until_complete(task)
+
+
+    def process_channels(self, urls, db, cp):
+        for channel_name, channel_tech_name in urls:
+            db.add_channel(channel_name, channel_tech_name)
+            cp.add_channel_processing(channel_tech_name, db)
+        self.wait_channel_processing()
+
+
+def main():
     urls = [
         ('Data Science Books', 'https://t.me/DataScience_Books'),
         ('Javascript js frontend', 'https://t.me/frontendarchive'),  # !!!
@@ -73,12 +105,11 @@ def test():
     cp = ChannelProcessing()
     db.db_connect()
     cp.connect_to_telegram()
-    for channel_name, channel_tech_name in urls:
-        db.add_channel(channel_name, channel_tech_name)
-        cp.process_channel(channel_tech_name, db)
+    # asyncio.run(cp.process_channels(urls, db, cp))
+    cp.process_channels(urls, db, cp)
     cp.disconnect_from_telegram()
     db.db_disconnect()
 
 
 if __name__ == '__main__':
-    test()
+    main()
